@@ -1,0 +1,12 @@
+.slideshowContainer {
+  width: 300px;
+  height: 300px;
+  overflow: hidden;
+  margin: 0 auto;
+}
+
+.slideshowImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
