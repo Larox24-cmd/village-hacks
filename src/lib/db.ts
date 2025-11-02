@@ -1,8 +1,14 @@
-import type { Pool } from 'pg';
-
 export type LeadStatus = 'new' | 'qualified' | 'nurture' | 'customer';
 export type InteractionPhase = 'PHASE1' | 'PHASE2' | 'PHASE3';
 export type InteractionChannel = 'SMS' | 'Email' | 'Call' | 'Task' | 'System';
+
+type QueryResult<T = unknown> = { rows: T[] };
+
+type Pool = {
+  query: <T = unknown>(text: string, params?: unknown[]) => Promise<QueryResult<T>>;
+};
+
+type PoolConstructor = new (config: Record<string, unknown>) => Pool;
 
 export type StoredLead = {
   id: number;
@@ -109,16 +115,31 @@ const ensureSchema = async (pool: Pool) => {
 };
 
 const createPool = async (): Promise<Pool | null> => {
+  const connectionString =
+    process.env.DATABASE_URL ?? 'postgres://postgres:postgres@localhost:5432/agentic_engine';
+
+  let PoolClass: PoolConstructor | null = null;
   try {
-    const pg = (await import('pg')) as { Pool: new (config: Record<string, unknown>) => Pool };
-    const connectionString =
-      process.env.DATABASE_URL ?? 'postgres://postgres:postgres@localhost:5432/agentic_engine';
-    const pool = new pg.Pool({ connectionString });
+    const req = eval('require') as (id: string) => unknown;
+    const pgModule = req('pg') as { Pool?: PoolConstructor } | undefined;
+    PoolClass = pgModule?.Pool ?? null;
+  } catch (error) {
+    console.error('pg module not available. Install it to enable Postgres persistence.', error);
+    return null;
+  }
+
+  if (!PoolClass) {
+    console.error('pg module loaded without Pool constructor.');
+    return null;
+  }
+
+  try {
+    const pool = new PoolClass({ connectionString });
     await pool.query('SELECT 1;');
     await ensureSchema(pool);
     return pool;
   } catch (error) {
-    console.error('Failed to initialize Postgres pool. Ensure pg is installed and DATABASE_URL is set.', error);
+    console.error('Failed to initialize Postgres pool. Ensure DATABASE_URL is reachable.', error);
     return null;
   }
 };
